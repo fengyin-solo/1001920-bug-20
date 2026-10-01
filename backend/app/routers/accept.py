@@ -30,6 +30,13 @@ def list_entries(
     return PageResult(items=items, total=total, page=page, size=size)
 
 
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出验收确认清单：与列表同一序列化口径，导出值与页面一致。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "accept", "total": total, "items": items}
+
+
 @router.get("/{entry_id}", response_model=dict)
 def get_entry(entry_id: int) -> dict:
     """读取单条验收单明细；不存在时给出可读的错误说明。"""
@@ -50,16 +57,13 @@ def create_entry(payload: EntryPayload) -> ActionResult:
 
 @router.post("/{entry_id}/actions", response_model=ActionResult)
 def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
-    """对单条验收单执行开始验收、确认通过、下发返工；不允许的动作会被拦下并说明原因。"""
+    """对单条验收单执行开始验收、确认通过、下发返工。
+
+    确认通过/下发返工可携带 验收结论 / 验收人员 / 验收日期；结论会回写到关联检修
+    任务台账并保留历史等级。重复提交是幂等的，只算一次。
+    """
     action = str(payload.values.get("action") or "").strip()
-    entry, message = service.run_action(entry_id, action)
+    entry, message = service.run_action(entry_id, action, payload.values)
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出验收确认清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "accept", "total": total, "items": items}

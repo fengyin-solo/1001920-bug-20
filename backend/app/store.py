@@ -27,6 +27,16 @@ class Store:
                 return row
         return None
 
+    def find_by_field(self, module: str, field: str, value: str) -> dict[str, Any] | None:
+        """按业务字段（如任务编号）精确查找一条记录，供跨模块回写台账使用。"""
+        target = str(value or "").strip()
+        if not target:
+            return None
+        for row in self.rows(module):
+            if str(row.get(field) or "").strip() == target:
+                return row
+        return None
+
     def overview(self) -> dict[str, object]:
         modules: list[dict[str, object]] = []
         for name in self.module_names():

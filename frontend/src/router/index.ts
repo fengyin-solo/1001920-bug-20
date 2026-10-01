@@ -5,6 +5,7 @@ const Windfarm = () => import('@/views/windfarm/index.vue')
 const Turbine = () => import('@/views/turbine/index.vue')
 const Blade = () => import('@/views/blade/index.vue')
 const Gearbox = () => import('@/views/gearbox/index.vue')
+const GearboxDetail = () => import('@/views/gearbox/detail.vue')
 const Generator = () => import('@/views/generator/index.vue')
 const Pitch = () => import('@/views/pitch/index.vue')
 const Yaw = () => import('@/views/yaw/index.vue')
@@ -28,6 +29,7 @@ const router = createRouter({
     { path: '/turbine', name: 'turbine', component: Turbine },
     { path: '/blade', name: 'blade', component: Blade },
     { path: '/gearbox', name: 'gearbox', component: Gearbox },
+    { path: '/gearbox/:id', name: 'gearbox-detail', component: GearboxDetail },
     { path: '/generator', name: 'generator', component: Generator },
     { path: '/pitch', name: 'pitch', component: Pitch },
     { path: '/yaw', name: 'yaw', component: Yaw },
