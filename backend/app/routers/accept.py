@@ -6,14 +6,14 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas import ActionResult, EntryPayload, PageResult
-from app.services.accept import AcceptService
+from app.services.accept import AcceptService, STATUS_ORDER, to_view
 
 router = APIRouter(prefix="/api/accept", tags=["验收确认"])
 
 service = AcceptService()
 
 LIST_FIELDS = ["验收单号", "关联任务", "验收项目", "验收标准", "验收结论", "验收人员", "验收日期", "验收状态"]
-STATUSES = ["待验收", "验收中", "已通过", "需返工"]
+STATUSES = STATUS_ORDER
 
 
 @router.get("", response_model=PageResult[dict])
@@ -28,6 +28,14 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+# 注意：/export 必须声明在 /{entry_id} 之前，否则会被当成 entry_id=export 匹配
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出验收确认清单：与列表页同一取数口径，返回全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "accept", "total": total, "items": items}
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -45,21 +53,14 @@ def create_entry(payload: EntryPayload) -> ActionResult:
     entry, missing = service.create_entry(payload.values)
     if missing:
         return ActionResult(ok=False, message=f"缺少必填字段：{'、'.join(missing)}")
-    return ActionResult(ok=True, message="验收单已登记", entry=entry)
+    return ActionResult(ok=True, message="验收单已登记", entry=to_view(entry))
 
 
 @router.post("/{entry_id}/actions", response_model=ActionResult)
 def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     """对单条验收单执行开始验收、确认通过、下发返工；不允许的动作会被拦下并说明原因。"""
     action = str(payload.values.get("action") or "").strip()
-    entry, message = service.run_action(entry_id, action)
+    entry, message = service.run_action(entry_id, action, payload.values)
     if entry is None:
         return ActionResult(ok=False, message=message)
-    return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出验收确认清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "accept", "total": total, "items": items}
+    return ActionResult(ok=True, message=message, entry=to_view(entry))

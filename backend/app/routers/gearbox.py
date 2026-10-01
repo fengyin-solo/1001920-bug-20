@@ -6,14 +6,14 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas import ActionResult, EntryPayload, PageResult
-from app.services.gearbox import GearboxService
+from app.services.gearbox import GearboxService, STATUS_ORDER, to_view
 
 router = APIRouter(prefix="/api/gearbox", tags=["齿轮箱"])
 
 service = GearboxService()
 
 LIST_FIELDS = ["齿轮箱编号", "所属机组", "油温上限", "振动值", "上次换油日", "下次换油日", "油品型号", "齿轮箱状态"]
-STATUSES = ["待换油", "运行正常", "油温偏高", "已更换"]
+STATUSES = STATUS_ORDER
 
 
 @router.get("", response_model=PageResult[dict])
@@ -28,6 +28,14 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+# 注意：/export 必须声明在 /{entry_id} 之前，否则会被当成 entry_id=export 匹配
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出齿轮箱清单：与列表页同一取数口径，返回全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "gearbox", "total": total, "items": items}
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -45,21 +53,14 @@ def create_entry(payload: EntryPayload) -> ActionResult:
     entry, missing = service.create_entry(payload.values)
     if missing:
         return ActionResult(ok=False, message=f"缺少必填字段：{'、'.join(missing)}")
-    return ActionResult(ok=True, message="齿轮箱已登记", entry=entry)
+    return ActionResult(ok=True, message="齿轮箱已登记", entry=to_view(entry))
 
 
 @router.post("/{entry_id}/actions", response_model=ActionResult)
 def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     """对单条齿轮箱执行确认换油、登记油温异常、更换齿轮箱；不允许的动作会被拦下并说明原因。"""
     action = str(payload.values.get("action") or "").strip()
-    entry, message = service.run_action(entry_id, action)
+    entry, message = service.run_action(entry_id, action, payload.values)
     if entry is None:
         return ActionResult(ok=False, message=message)
-    return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出齿轮箱清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "gearbox", "total": total, "items": items}
+    return ActionResult(ok=True, message=message, entry=to_view(entry))
